@@ -12,3 +12,6 @@ Bohan Xiong, Kan Chang, Mingyang Ling, Shilin Huang, Shucheng Xia, Ran Wei
 
 The codes will be released after our paper is accepted.
 
+Evaluation on real-world low-light images from ExDark
+
+test.py --weights ./pretrained_model/IT_YOLO.pt --data ExDark_10.yaml --img 544 --batch-size 1
