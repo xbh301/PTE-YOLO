@@ -56,7 +56,7 @@ class Detect(nn.Module):
         self.no = nc + 5  # number of outputs per anchor    xywhc 15
         self.nl = len(anchors)  # number of detection layers
         self.na = len(anchors[0]) // 2  # number of anchors
-        self.grid = [torch.zeros(1)] * self.nl  # init grid         grid是一个列表，{list: 3}  tensor([0.]) X 3
+        self.grid = [torch.zeros(1)] * self.nl  # init grid       
         self.anchor_grid = [torch.zeros(1)] * self.nl  # init anchor grid
         self.register_buffer('anchors', torch.tensor(anchors).float().view(self.nl, -1, 2))  # shape(nl,na,2)
         self.m = nn.ModuleList(nn.Conv2d(x, self.no * self.na, 1) for x in ch)  # output conv
@@ -121,8 +121,6 @@ class Model(nn.Module):
         if anchors:
             LOGGER.info(f'Overriding model.yaml anchors with anchors={anchors}')
             self.yaml['anchors'] = round(anchors)  # override yaml value
-        # self.model: 初始化的整个网络模型(包括Detect层结构)
-        # self.save: 所有层结构中from不等于-1的序号，并排好序  [4, 6, 10, 14, 17, 20, 23]
         self.model, self.save = parse_model(deepcopy(self.yaml), ch=[ch])  # model, savelist
         self.names = [str(i) for i in range(self.yaml['nc'])]  # default names
         self.inplace = self.yaml.get('inplace', True)
@@ -132,12 +130,11 @@ class Model(nn.Module):
         if isinstance(m, Detect):
             s = 256  # 2x min stride
             m.inplace = self.inplace
-            # m.stride = torch.tensor([s / x.shape[-2] for x in self.forward(torch.zeros(1, ch, s, s))])  # forward       用来测试得到stride
             m.stride = torch.tensor([8, 16, 32])
             check_anchor_order(m)  # must be in pixel-space (not grid-space)
-            m.anchors /= m.stride.view(-1, 1, 1)        # 检查anchor顺序和stride顺序是否一致
+            m.anchors /= m.stride.view(-1, 1, 1)        
             self.stride = m.stride
-            self._initialize_biases()  # only run once  # 初始化偏置
+            self._initialize_biases()  # only run once  
 
         # Init weights, biases
         initialize_weights(self)
@@ -171,15 +168,6 @@ class Model(nn.Module):
             if profile:
                 self._profile_one_layer(m, x, dt)
             x = m(x)
-            # if m.type == 'models.AAA.moco.v22_MoCo':
-            #     _, output, target = x
-            # if m.type == 'models.AAA.moco.v24_MoCo':
-            #     _, output, target = x
-            # if m.type == 'models.AAA.moco.v25_MoCo':
-            #     _, output, target = x
-            # if m.type == 'models.AAA.moco.v26_MoCo' or m.type == 'models.AAA.moco.v22_4_MoCo' or m.type == 'models.AAA.moco.v22_5_MoCo'\
-            #         or m.type == 'models.AAA.moco.v27_MoCo' or m.type == 'models.AAA.moco.v27_2_MoCo':
-            #     _, output, target = x
             y.append(x if m.i in self.save else None)  # save output
             if visualize:
                 feature_visualization(x, m.type, m.i, save_dir=visualize)
@@ -244,10 +232,6 @@ class Model(nn.Module):
             LOGGER.info(
                 ('%6g Conv2d.bias:' + '%10.3g' * 6) % (mi.weight.shape[1], *b[:5].mean(1).tolist(), b[5:].mean()))
 
-    # def _print_weights(self):
-    #     for m in self.model.modules():
-    #         if type(m) is Bottleneck:
-    #             LOGGER.info('%10.3g' % (m.w.detach().sigmoid() * 2))  # shortcut weights
 
     def fuse(self):  # fuse model Conv2d() + BatchNorm2d() layers
         LOGGER.info('Fusing layers... ')
@@ -279,11 +263,6 @@ def parse_model(d, ch):  # model_dict, input_channels(3)
     anchors, nc, gd, gw = d['anchors'], d['nc'], d['depth_multiple'], d['width_multiple']
     na = (len(anchors[0]) // 2) if isinstance(anchors, list) else anchors  # number of anchors
     no = na * (nc + 5)  # number of outputs = anchors * (classes + 5)
-
-    # 开始搭建网络
-    # layers: 保存每一层的层结构
-    # save: 记录下所有层结构中from中不是-1的层结构序号
-    # c2: 保存当前层的输出channel
     layers, save, c2 = [], [], ch[-1]  # layers, savelist, ch out
     # fuse = False
     for i, (f, n, m, args) in enumerate(d['enhancement'] + d['backbone'] + d['head']):  # from, number, module, args
@@ -317,14 +296,7 @@ def parse_model(d, ch):  # model_dict, input_channels(3)
             c2 = ch[f] * args[0] ** 2
         elif m is Expand:
             c2 = ch[f] // args[0] ** 2
-        elif m is input:
-            pass
-        elif m is v22_MoCo or m is v24_MoCo or m is v25_MoCo or m is v26_MoCo or m is v22_4_MoCo or m is v22_5_MoCo or m is v27_MoCo\
-                or m is v35_LAGM:
-            c2 = 3
-        elif m is v14_fc_layer or m is v19_fc_layer or m is v22_5_fc_layer or m is v22_6_fc_layer or m is v27_3_fc_layer:
-            pass
-        elif m is v19_ImageLevelEnhancement:
+        elif m in (input, v35_LAGM, v27_3_fc_layer, v19_ImageLevelEnhancement):
             pass
         elif m is FCM:
             c1 = ch[f[0]]
@@ -335,9 +307,8 @@ def parse_model(d, ch):  # model_dict, input_channels(3)
         m_ = nn.Sequential(*(m(*args) for _ in range(n))) if n > 1 else m(*args)  # module
         t = str(m)[8:-2].replace('__main__.', '')  # module type
         np = sum(x.numel() for x in m_.parameters())  # number params
-        m_.i, m_.f, m_.type, m_.np = i, f, t, np  # attach index, 'from' index, type, number params, 是否用于融合
+        m_.i, m_.f, m_.type, m_.np = i, f, t, np  # attach index, 'from' index, type, number params, 
         LOGGER.info(f'{i:>3}{str(f):>18}{n_:>3}{np:10.0f}  {t:<40}{str(args):<30}')  # print
-        # append to savelist  把所有层结构中from不是-1的值记下  [6, 4, 14, 10, 17, 20, 23]
         save.extend(x % i for x in ([f] if isinstance(f, int) else f) if x != -1)  # append to savelist
         layers.append(m_)
         if i == 0:
@@ -364,14 +335,6 @@ if __name__ == '__main__':
     im_patch = torch.rand(opt.batch_size, 5, 3, 136, 136).to(device)
     im = [img, im_patch]
     model = Model(opt.cfg).to(device)
-
-    # torch.save(model, "m.pt")
-    # model = Model(opt.cfg).to(device)
-    # x = torch.randn(1, 3, 640, 640).to(device)
-    # script_model = torch.jit.trace(model, im)
-    # script_model.save("m.pt")
-
-    # summary(model, input_size=( 3, 544, 544))
 
     # Options
     if opt.line_profile:  # profile layer by layer
