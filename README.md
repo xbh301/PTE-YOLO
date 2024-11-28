@@ -12,6 +12,40 @@ Bohan Xiong, Kan Chang, Mingyang Ling, Shilin Huang, Shucheng Xia, Ran Wei
 
 The codes will be released after our paper is accepted.
 
-Evaluation on real-world low-light images from ExDark
+# Dependencies
 
-test.py --weights ./pretrained_model/IT_YOLO.pt --data ExDark_10.yaml --img 544 --batch-size 1
+* python==3.8.0
+* torch==1.11.0
+* torchvision==0.12.0
+* numpy==1.23.4
+* opencv-python==4.8.1.78
+  
+```
+cd IT-YOLO
+pip install -r ./requirements.txt
+```
+
+# Datasets
+Please download the processed datasets and pretrained models from the anonymous Github links below.
+
+# Folder structure
+Download the datasets and pretrained models first. Please prepare the basic folder structure as follows.
+```
+/parent_folder
+  /datasets   # folder for datasets 
+    /ExDark_10
+    ...
+  /DE-YOLO
+    /data     # config files for datasets
+    /models   # python files for DE-YOLO
+    /pretrained_models  # folder for pretrained models
+    requirements.txt
+    README.md
+    ...
+```
+
+# Quick Test
+## Evaluation on real-world low-light images from ExDark
+```
+test.py --weights ./pretrained_models/IT_YOLO.pt --data ExDark_10.yaml --img 544 --batch-size 1
+```
