@@ -28,6 +28,8 @@ pip install -r ./requirements.txt
 # Datasets
 Please download the processed datasets and pretrained models from the anonymous Github links below.
 
+[Baidu Netdisk](https://pan.baidu.com/s/1j_v8EdY9l0YXxkjq6lD66w) password：n1n3
+
 # Folder structure
 Download the datasets and pretrained models first. Please prepare the basic folder structure as follows.
 ```
