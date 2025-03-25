@@ -1,8 +1,8 @@
 <div align="center">
 
-# Illumination-Aware Two-stage Enhancement for Low-Light Object Detection
+# Prompt-Based Two-Stage Enhancement for Low-Light Object Detection
 
-Bohan Xiong, Kan Chang, Mingyang Ling, Shilin Huang, Shucheng Xia, Ran Wei
+Bohan Xiong, Kan Chang, Mingyang Ling, Shilin Huang, Shucheng Xia, Yujian Yuan
 
 [![python](https://img.shields.io/badge/-Python_3.6_%7C_3.7-blue?logo=python&logoColor=white)](https://github.com/pre-commit/pre-commit)
 [![pytorch](https://img.shields.io/badge/PyTorch-ee4c2c?logo=pytorch&logoColor=white)](https://pytorch.org/get-started/locally/)
@@ -21,7 +21,7 @@ The codes will be released after our paper is accepted.
 * opencv-python==4.8.1.78
   
 ```
-cd IT-YOLO
+cd PTE-YOLO
 pip install -r ./requirements.txt
 ```
 
