@@ -27,15 +27,13 @@ from models.experimental import *
 from utils.autoanchor import check_anchor_order
 from utils.general import LOGGER, check_version, check_yaml, make_divisible, print_args
 from utils.plots import feature_visualization
-from utils.torch_utils import (fuse_conv_and_bn, initialize_weights, model_info_v27_3, profile, scale_img, select_device,
+from utils.torch_utils import (fuse_conv_and_bn, initialize_weights, model_info_v63, profile, scale_img, select_device,
                                time_sync)
 
-# from models.AAA.structure1 import *
 from models.AAA.input import *
 from models.AAA.filter import *
 from models.AAA.fcm import *
-from models.AAA.LAGM import v14_fc_layer
-# from utils.loss import KL_loss
+from models.AAA.LAGM import *
 
 # from torchsummary import summary
 
@@ -56,7 +54,7 @@ class Detect(nn.Module):
         self.no = nc + 5  # number of outputs per anchor    xywhc 15
         self.nl = len(anchors)  # number of detection layers
         self.na = len(anchors[0]) // 2  # number of anchors
-        self.grid = [torch.zeros(1)] * self.nl  # init grid       
+        self.grid = [torch.zeros(1)] * self.nl  # init grid         grid是一个列表，{list: 3}  tensor([0.]) X 3
         self.anchor_grid = [torch.zeros(1)] * self.nl  # init anchor grid
         self.register_buffer('anchors', torch.tensor(anchors).float().view(self.nl, -1, 2))  # shape(nl,na,2)
         self.m = nn.ModuleList(nn.Conv2d(x, self.no * self.na, 1) for x in ch)  # output conv
@@ -121,6 +119,8 @@ class Model(nn.Module):
         if anchors:
             LOGGER.info(f'Overriding model.yaml anchors with anchors={anchors}')
             self.yaml['anchors'] = round(anchors)  # override yaml value
+        # self.model: 初始化的整个网络模型(包括Detect层结构)
+        # self.save: 所有层结构中from不等于-1的序号，并排好序  [4, 6, 10, 14, 17, 20, 23]
         self.model, self.save = parse_model(deepcopy(self.yaml), ch=[ch])  # model, savelist
         self.names = [str(i) for i in range(self.yaml['nc'])]  # default names
         self.inplace = self.yaml.get('inplace', True)
@@ -130,11 +130,12 @@ class Model(nn.Module):
         if isinstance(m, Detect):
             s = 256  # 2x min stride
             m.inplace = self.inplace
+            # m.stride = torch.tensor([s / x.shape[-2] for x in self.forward(torch.zeros(1, ch, s, s))])  # forward       用来测试得到stride
             m.stride = torch.tensor([8, 16, 32])
             check_anchor_order(m)  # must be in pixel-space (not grid-space)
-            m.anchors /= m.stride.view(-1, 1, 1)        
+            m.anchors /= m.stride.view(-1, 1, 1)        # 检查anchor顺序和stride顺序是否一致
             self.stride = m.stride
-            self._initialize_biases()  # only run once  
+            self._initialize_biases()  # only run once  # 初始化偏置
 
         # Init weights, biases
         initialize_weights(self)
@@ -162,12 +163,17 @@ class Model(nn.Module):
 
     def _forward_once(self, x, profile=False, visualize=False):
         y, dt = [], []  # outputs
+        # i = 0
         for m in self.model:
             if m.f != -1:  # if not from previous layer
                 x = y[m.f] if isinstance(m.f, int) else [x if j == -1 else y[j] for j in m.f]  # from earlier layers
             if profile:
                 self._profile_one_layer(m, x, dt)
             x = m(x)
+            # if i == 6:
+            #     break
+            #     torch.save(x, '.\data\images\\pair_im\\000007_r2_it.pth')
+            # i = i+1
             y.append(x if m.i in self.save else None)  # save output
             if visualize:
                 feature_visualization(x, m.type, m.i, save_dir=visualize)
@@ -232,6 +238,10 @@ class Model(nn.Module):
             LOGGER.info(
                 ('%6g Conv2d.bias:' + '%10.3g' * 6) % (mi.weight.shape[1], *b[:5].mean(1).tolist(), b[5:].mean()))
 
+    # def _print_weights(self):
+    #     for m in self.model.modules():
+    #         if type(m) is Bottleneck:
+    #             LOGGER.info('%10.3g' % (m.w.detach().sigmoid() * 2))  # shortcut weights
 
     def fuse(self):  # fuse model Conv2d() + BatchNorm2d() layers
         LOGGER.info('Fusing layers... ')
@@ -244,7 +254,7 @@ class Model(nn.Module):
         return self
 
     def info(self, verbose=False, img_size=544):  # print model information
-        model_info_v27_3(self, verbose, img_size)
+        model_info_v63(self, verbose, img_size)
 
     def _apply(self, fn):
         # Apply to(), cpu(), cuda(), half() to model tensors that are not parameters or registered buffers
@@ -263,6 +273,11 @@ def parse_model(d, ch):  # model_dict, input_channels(3)
     anchors, nc, gd, gw = d['anchors'], d['nc'], d['depth_multiple'], d['width_multiple']
     na = (len(anchors[0]) // 2) if isinstance(anchors, list) else anchors  # number of anchors
     no = na * (nc + 5)  # number of outputs = anchors * (classes + 5)
+
+    # 开始搭建网络
+    # layers: 保存每一层的层结构
+    # save: 记录下所有层结构中from中不是-1的层结构序号
+    # c2: 保存当前层的输出channel
     layers, save, c2 = [], [], ch[-1]  # layers, savelist, ch out
     # fuse = False
     for i, (f, n, m, args) in enumerate(d['enhancement'] + d['backbone'] + d['head']):  # from, number, module, args
@@ -296,9 +311,13 @@ def parse_model(d, ch):  # model_dict, input_channels(3)
             c2 = ch[f] * args[0] ** 2
         elif m is Expand:
             c2 = ch[f] // args[0] ** 2
-        elif m in (input, v35_LAGM, v27_3_fc_layer, v19_ImageLevelEnhancement):
+        elif m is input:
             pass
-        elif m is FCM:
+        elif m is v63_PG:
+            c2 = 3
+        elif m is v60_ImageLevelEnhancement:
+            pass
+        elif m is v61_IEM:
             c1 = ch[f[0]]
             args = [c1, *args]
         else:
@@ -307,8 +326,9 @@ def parse_model(d, ch):  # model_dict, input_channels(3)
         m_ = nn.Sequential(*(m(*args) for _ in range(n))) if n > 1 else m(*args)  # module
         t = str(m)[8:-2].replace('__main__.', '')  # module type
         np = sum(x.numel() for x in m_.parameters())  # number params
-        m_.i, m_.f, m_.type, m_.np = i, f, t, np  # attach index, 'from' index, type, number params, 
+        m_.i, m_.f, m_.type, m_.np = i, f, t, np  # attach index, 'from' index, type, number params, 是否用于融合
         LOGGER.info(f'{i:>3}{str(f):>18}{n_:>3}{np:10.0f}  {t:<40}{str(args):<30}')  # print
+        # append to savelist  把所有层结构中from不是-1的值记下  [6, 4, 14, 10, 17, 20, 23]
         save.extend(x % i for x in ([f] if isinstance(f, int) else f) if x != -1)  # append to savelist
         layers.append(m_)
         if i == 0:
@@ -335,6 +355,14 @@ if __name__ == '__main__':
     im_patch = torch.rand(opt.batch_size, 5, 3, 136, 136).to(device)
     im = [img, im_patch]
     model = Model(opt.cfg).to(device)
+
+    # torch.save(model, "m.pt")
+    # model = Model(opt.cfg).to(device)
+    # x = torch.randn(1, 3, 640, 640).to(device)
+    # script_model = torch.jit.trace(model, im)
+    # script_model.save("m.pt")
+
+    # summary(model, input_size=( 3, 544, 544))
 
     # Options
     if opt.line_profile:  # profile layer by layer
