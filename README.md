@@ -10,7 +10,6 @@ Bohan Xiong, Kan Chang, Mingyang Ling, Shilin Huang, Shucheng Xia, Yujian Yuan
 </div>
 
 
-The codes will be released after our paper is accepted.
 
 # Dependencies
 
