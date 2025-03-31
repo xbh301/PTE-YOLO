@@ -49,5 +49,5 @@ Download the datasets and pretrained models first. Please prepare the basic fold
 # Quick Test
 ## Evaluation on real-world low-light images from ExDark
 ```
-test.py --weights ./pretrained_models/IT_YOLO.pt --data ExDark_10.yaml --img 544 --batch-size 1
+test.py --weights ./pretrained_models/PTE_YOLO.pt --data ExDark_10.yaml --img 544 --batch-size 1
 ```
